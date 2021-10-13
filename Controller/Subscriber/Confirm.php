@@ -4,21 +4,13 @@
  * Copyright © Magento, Inc. All rights reserved.
  * See COPYING.txt for license details.
  */
-declare(strict_types=1);
-
 namespace Magento\Newsletter\Controller\Subscriber;
 
-use Magento\Framework\App\Action\HttpGetActionInterface;
-
-/**
- * Confirm subscription controller.
- */
-class Confirm extends \Magento\Newsletter\Controller\Subscriber implements HttpGetActionInterface
+class Confirm extends \Magento\Newsletter\Controller\Subscriber
 {
     /**
-     * Subscription confirm action.
-     *
-     * @return \Magento\Framework\Controller\Result\Redirect
+     * Subscription confirm action
+     * @return void
      */
     public function execute()
     {
@@ -31,17 +23,17 @@ class Confirm extends \Magento\Newsletter\Controller\Subscriber implements HttpG
 
             if ($subscriber->getId() && $subscriber->getCode()) {
                 if ($subscriber->confirm($code)) {
-                    $this->messageManager->addSuccessMessage(__('Your subscription has been confirmed.'));
+                    $this->messageManager->addSuccess(__('Your subscription has been confirmed.'));
                 } else {
-                    $this->messageManager->addErrorMessage(__('This is an invalid subscription confirmation code.'));
+                    $this->messageManager->addError(__('This is an invalid subscription confirmation code.'));
                 }
             } else {
-                $this->messageManager->addErrorMessage(__('This is an invalid subscription ID.'));
+                $this->messageManager->addError(__('This is an invalid subscription ID.'));
             }
         }
-        /** @var \Magento\Framework\Controller\Result\Redirect $redirect */
-        $redirect = $this->resultFactory->create(\Magento\Framework\Controller\ResultFactory::TYPE_REDIRECT);
-        $redirectUrl = $this->_storeManager->getStore()->getBaseUrl();
-        return $redirect->setUrl($redirectUrl);
+
+        $resultRedirect = $this->resultRedirectFactory->create();
+        $resultRedirect->setUrl($this->_storeManager->getStore()->getBaseUrl());
+        return $resultRedirect;
     }
 }

@@ -5,30 +5,20 @@
  */
 namespace Magento\Newsletter\Model\ResourceModel;
 
-use Magento\Customer\Api\Data\CustomerInterface;
-use Magento\Framework\App\ObjectManager;
-use Magento\Framework\DB\Adapter\AdapterInterface;
-use Magento\Framework\Exception\LocalizedException;
-use Magento\Framework\Math\Random;
-use Magento\Framework\Model\ResourceModel\Db\AbstractDb;
-use Magento\Framework\Model\ResourceModel\Db\Context;
-use Magento\Framework\Stdlib\DateTime\DateTime;
-use Magento\Newsletter\Model\Subscriber as SubscriberModel;
-use Magento\Store\Model\StoreManagerInterface;
-
 /**
  * Newsletter subscriber resource model
  *
- * @author Magento Core Team <core@magentocommerce.com>
+ * @author      Magento Core Team <core@magentocommerce.com>
+ *
  * @api
  * @since 100.0.2
  */
-class Subscriber extends AbstractDb
+class Subscriber extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
 {
     /**
      * DB connection
      *
-     * @var AdapterInterface
+     * @var \Magento\Framework\DB\Adapter\AdapterInterface
      */
     protected $connection;
 
@@ -49,41 +39,31 @@ class Subscriber extends AbstractDb
     /**
      * Date
      *
-     * @var DateTime
+     * @var \Magento\Framework\Stdlib\DateTime\DateTime
      */
     protected $_date;
 
     /**
-     * @var Random
+     * @var \Magento\Framework\Math\Random
      */
     protected $mathRandom;
 
     /**
-     * Store manager
-     *
-     * @var StoreManagerInterface
-     */
-    private $storeManager;
-
-    /**
      * Construct
      *
-     * @param Context $context
-     * @param DateTime $date
-     * @param Random $mathRandom
+     * @param \Magento\Framework\Model\ResourceModel\Db\Context $context
+     * @param \Magento\Framework\Stdlib\DateTime\DateTime $date
+     * @param \Magento\Framework\Math\Random $mathRandom
      * @param string $connectionName
-     * @param StoreManagerInterface $storeManager
      */
     public function __construct(
-        Context $context,
-        DateTime $date,
-        Random $mathRandom,
-        $connectionName = null,
-        StoreManagerInterface $storeManager = null
+        \Magento\Framework\Model\ResourceModel\Db\Context $context,
+        \Magento\Framework\Stdlib\DateTime\DateTime $date,
+        \Magento\Framework\Math\Random $mathRandom,
+        $connectionName = null
     ) {
         $this->_date = $date;
         $this->mathRandom = $mathRandom;
-        $this->storeManager = $storeManager ?: ObjectManager::getInstance()->get(StoreManagerInterface::class);
         parent::__construct($context, $connectionName);
     }
 
@@ -111,53 +91,69 @@ class Subscriber extends AbstractDb
     }
 
     /**
-     * Load by subscriber email
+     * Load subscriber from DB by email
      *
-     * @param string $email
-     * @param int $websiteId
+     * @param string $subscriberEmail
      * @return array
-     * @since 100.4.0
      */
-    public function loadBySubscriberEmail(string $email, int $websiteId): array
+    public function loadByEmail($subscriberEmail)
     {
-        $storeIds = $this->storeManager->getWebsite($websiteId)->getStoreIds();
-        $select = $this->connection->select()
-            ->from($this->getMainTable())
-            ->where('subscriber_email = ?', $email)
-            ->where('store_id IN (?)', $storeIds)
-            ->limit(1);
+        $select = $this->connection->select()->from($this->getMainTable())->where('subscriber_email=:subscriber_email');
 
-        $data = $this->connection->fetchRow($select);
-        if (!$data) {
+        $result = $this->connection->fetchRow($select, ['subscriber_email' => $subscriberEmail]);
+
+        if (!$result) {
             return [];
         }
 
-        return $data;
+        return $result;
     }
 
     /**
-     * Load by customer id
+     * Load subscriber by customer
      *
-     * @param int $customerId
-     * @param int $websiteId
+     * @param \Magento\Customer\Api\Data\CustomerInterface $customer
      * @return array
-     * @since 100.4.0
      */
-    public function loadByCustomerId(int $customerId, int $websiteId): array
+    public function loadByCustomerData(\Magento\Customer\Api\Data\CustomerInterface $customer)
     {
-        $storeIds = $this->storeManager->getWebsite($websiteId)->getStoreIds();
-        $select = $this->connection->select()
+        $select = $this->connection
+            ->select()
             ->from($this->getMainTable())
-            ->where('customer_id = ?', $customerId)
-            ->where('store_id IN (?)', $storeIds)
-            ->limit(1);
+            ->where('customer_id=:customer_id and store_id=:store_id');
 
-        $data = $this->connection->fetchRow($select);
-        if (!$data) {
-            return [];
+        $result = $this->connection
+            ->fetchRow(
+                $select,
+                [
+                    'customer_id' => $customer->getId(),
+                    'store_id' => $customer->getStoreId()
+                ]
+            );
+
+        if ($result) {
+            return $result;
         }
 
-        return $data;
+        $select = $this->connection
+            ->select()
+            ->from($this->getMainTable())
+            ->where('subscriber_email=:subscriber_email and store_id=:store_id');
+
+        $result = $this->connection
+            ->fetchRow(
+                $select,
+                [
+                    'subscriber_email' => $customer->getEmail(),
+                    'store_id' => $customer->getStoreId()
+                ]
+            );
+
+        if ($result) {
+            return $result;
+        }
+
+        return [];
     }
 
     /**
@@ -173,12 +169,12 @@ class Subscriber extends AbstractDb
     /**
      * Updates data when subscriber received
      *
-     * @param SubscriberModel $subscriber
+     * @param \Magento\Newsletter\Model\Subscriber $subscriber
      * @param \Magento\Newsletter\Model\Queue $queue
      * @return $this
-     * @throws LocalizedException
+     * @throws \Magento\Framework\Exception\LocalizedException
      */
-    public function received(SubscriberModel $subscriber, \Magento\Newsletter\Model\Queue $queue)
+    public function received(\Magento\Newsletter\Model\Subscriber $subscriber, \Magento\Newsletter\Model\Queue $queue)
     {
         $this->connection->beginTransaction();
         try {
@@ -191,41 +187,8 @@ class Subscriber extends AbstractDb
             $this->connection->commit();
         } catch (\Exception $e) {
             $this->connection->rollBack();
-            throw new LocalizedException(__('We cannot mark as received subscriber.'));
+            throw new \Magento\Framework\Exception\LocalizedException(__('We cannot mark as received subscriber.'));
         }
         return $this;
-    }
-
-    /**
-     * Load subscriber from DB by email
-     *
-     * @param string $subscriberEmail
-     * @return array
-     * @deprecated 100.4.0 The subscription should be loaded by website id
-     * @see loadBySubscriberEmail
-     */
-    public function loadByEmail($subscriberEmail)
-    {
-        $websiteId = (int)$this->storeManager->getWebsite()->getId();
-        return $this->loadBySubscriberEmail((string)$subscriberEmail, $websiteId);
-    }
-
-    /**
-     * Load subscriber by customer
-     *
-     * @param CustomerInterface $customer
-     * @return array
-     * @deprecated 100.4.0 The subscription should be loaded by website id
-     * @see loadByCustomerId
-     */
-    public function loadByCustomerData(CustomerInterface $customer)
-    {
-        $websiteId = (int)$this->storeManager->getWebsite()->getId();
-        $data = $this->loadByCustomerId((int)$customer->getId(), $websiteId);
-        if (empty($data)) {
-            $data = $this->loadBySubscriberEmail((string)$customer->getEmail(), $websiteId);
-        }
-
-        return $data;
     }
 }
